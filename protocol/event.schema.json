@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["event_id", "seq", "type", "created_at"],
+  "properties": {
+    "event_id": { "type": "string" },
+    "session_id": { "type": "string" },
+    "seq": { "type": "integer" },
+    "type": { "type": "string" },
+    "content": { "type": "string" },
+    "payload_json": { "type": "string" },
+    "created_at": { "type": "string" }
+  }
+}

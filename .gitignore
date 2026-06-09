@@ -3,3 +3,13 @@ node_modules/
 .DS_Store
 dist/
 .cache/
+target/
+*.db
+.dart_tool/
+.packages
+.flutter-plugins
+.flutter-plugins-dependencies
+build/
+.idea/
+.vscode/
+*.iml

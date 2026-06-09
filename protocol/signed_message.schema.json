@@ -1,0 +1,28 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": [
+    "version",
+    "message_id",
+    "device_id",
+    "type",
+    "timestamp_ms",
+    "nonce",
+    "seq",
+    "payload",
+    "payload_sha256",
+    "signature"
+  ],
+  "properties": {
+    "version": { "type": "integer", "const": 1 },
+    "message_id": { "type": "string" },
+    "device_id": { "type": "string" },
+    "type": { "type": "string" },
+    "timestamp_ms": { "type": "integer" },
+    "nonce": { "type": "string" },
+    "seq": { "type": "integer" },
+    "payload": { "type": "object", "maxProperties": 20 },
+    "payload_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "signature": { "type": "string" }
+  }
+}

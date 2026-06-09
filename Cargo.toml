@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "relay",
+    "bridge",
+]
+resolver = "2"
