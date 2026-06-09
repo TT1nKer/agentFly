@@ -45,6 +45,14 @@ impl BridgeClient {
 
         let (mut write, mut read) = ws_stream.split();
 
+        let info_msg = serde_json::json!({
+            "type": "bridge.info",
+            "from": self.bridge_id,
+            "to": "",
+        });
+        write.send(Message::Text(info_msg.to_string())).await
+            .map_err(|e| format!("send info: {}", e))?;
+
         let mut verify_ctx = VerifyContext::new(Utc::now().timestamp_millis());
         self.populate_trusted_devices(&mut verify_ctx)?;
 
@@ -92,6 +100,46 @@ impl BridgeClient {
     }
 
     fn handle_message(&self, text: &str, ctx: &mut VerifyContext) -> Result<Option<String>, String> {
+        let raw: serde_json::Value = serde_json::from_str(text).map_err(|e| format!("INVALID_JSON: {}", e))?;
+        let msg_type = raw.get("type").and_then(|v| v.as_str()).unwrap_or("");
+
+        if msg_type == "pairing.request" {
+            let code = raw.get("payload").and_then(|v| v.get("pairing_code")).and_then(|v| v.as_str()).unwrap_or("");
+            let public_key_b64 = raw.get("payload").and_then(|v| v.get("public_key")).and_then(|v| v.as_str()).unwrap_or("");
+            let device_name = raw.get("payload").and_then(|v| v.get("device_name")).and_then(|v| v.as_str()).unwrap_or("unknown");
+            let platform = raw.get("payload").and_then(|v| v.get("platform")).and_then(|v| v.as_str()).unwrap_or("unknown");
+            let phone_id = raw.get("device_id").and_then(|v| v.as_str()).unwrap_or("");
+
+            match crate::pairing::verify_pairing_request(&self.db, code, public_key_b64, device_name, platform) {
+                Ok(device_id) => {
+                    match crate::crypto::public_key_from_base64(public_key_b64) {
+                        Ok(vk) => {
+                            ctx.add_trusted_device(&device_id, vk);
+                            ctx.device_last_seq.insert(device_id.clone(), 0);
+                        }
+                        Err(e) => println!("[bridge] key parse error: {}", e),
+                    }
+                    let resp = serde_json::json!({
+                        "type": "paired",
+                        "device_id": device_id,
+                        "from": self.bridge_id,
+                        "to": phone_id,
+                    });
+                    return Ok(Some(resp.to_string()));
+                }
+                Err(e) => {
+                    let resp = serde_json::json!({
+                        "type": "error",
+                        "error": "pairing_failed",
+                        "detail": e,
+                        "from": self.bridge_id,
+                        "to": phone_id,
+                    });
+                    return Ok(Some(resp.to_string()));
+                }
+            }
+        }
+
         let msg = match parse_signed_message(text) {
             Ok(m) => m,
             Err(e) => {
@@ -177,6 +225,17 @@ impl BridgeClient {
                         let resp = serde_json::json!({
                             "type": "session.stopped",
                             "session_id": session_id,
+                            "from": self.bridge_id,
+                            "to": msg.device_id,
+                        });
+                        Ok(Some(resp.to_string()))
+                    }
+                    "session.list" => {
+                        let events = self.log.fetch_after(None, 0).unwrap_or_default();
+                        let resp = serde_json::json!({
+                            "type": "session.list",
+                            "sessions": [],
+                            "events_count": events.len(),
                             "from": self.bridge_id,
                             "to": msg.device_id,
                         });

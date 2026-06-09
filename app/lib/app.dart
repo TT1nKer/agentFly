@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'app_state.dart';
+import 'provider.dart';
 import 'screens/connection_screen.dart';
 
 class AgentCockpitApp extends StatelessWidget {
@@ -6,13 +8,16 @@ class AgentCockpitApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Agent Cockpit',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blueGrey),
-        useMaterial3: true,
+    return ChangeNotifierProvider(
+      create: (_) => AppState(),
+      child: MaterialApp(
+        title: 'Agent Cockpit',
+        theme: ThemeData(
+          colorScheme: ColorScheme.fromSeed(seedColor: Colors.blueGrey),
+          useMaterial3: true,
+        ),
+        home: const ConnectionScreen(),
       ),
-      home: const ConnectionScreen(),
     );
   }
 }

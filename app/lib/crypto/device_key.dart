@@ -8,6 +8,10 @@ class DeviceKey {
   DeviceKey._(this._signingKey, this.deviceId);
 
   static Future<DeviceKey> generate() async {
+    return generateSync();
+  }
+
+  static DeviceKey generateSync() {
     final signingKey = SigningKey.generate();
     final random = DateTime.now().microsecondsSinceEpoch & 0xFFFFFFFF;
     final deviceId = 'device_${random.toRadixString(16).padLeft(8, '0')}';

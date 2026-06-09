@@ -8,7 +8,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 
 class WsClient {
   final String relayUrl;
-  final String bridgeId;
+  String _bridgeId = '';
   WebSocketChannel? _channel;
   MessageService? _messageService;
   bool _connected = false;
@@ -20,11 +20,12 @@ class WsClient {
   Stream<Map<String, dynamic>> get events => _eventController.stream;
   Stream<String> get status => _statusController.stream;
   bool get isConnected => _connected;
+  String get bridgeId => _bridgeId;
 
   WsClient({
     required this.relayUrl,
-    required this.bridgeId,
-  });
+    String? bridgeId,
+  }) : _bridgeId = bridgeId ?? '';
 
   Future<void> init(DeviceKey deviceKey) async {
     final signer = Signer(deviceKey.signingKey);
@@ -54,6 +55,9 @@ class WsClient {
       (data) {
         try {
           final msg = jsonDecode(data as String) as Map<String, dynamic>;
+          if (msg['type'] == 'bridge.info') {
+            _bridgeId = msg['from'] ?? '';
+          }
           _eventController.add(msg);
         } catch (_) {}
       },
@@ -91,7 +95,7 @@ class WsClient {
       payload: payload,
     );
 
-    signedMsg['to'] = bridgeId;
+    signedMsg['to'] = _bridgeId;
 
     _channel?.sink.add(jsonEncode(signedMsg));
   }

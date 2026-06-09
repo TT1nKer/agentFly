@@ -5,14 +5,16 @@ class StatusBadge extends StatelessWidget {
 
   const StatusBadge({super.key, required this.status});
 
+  Color _color() {
+    if (status == 'online' || status == 'active') return Colors.green;
+    if (status == 'offline') return Colors.grey;
+    if (status == 'error' || status == 'revoked') return Colors.red;
+    return Colors.orange;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final color = switch (status) {
-      'online' || 'active' => Colors.green,
-      'offline' => Colors.grey,
-      'error' || 'revoked' => Colors.red,
-      _ => Colors.orange,
-    };
+    final color = _color();
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
