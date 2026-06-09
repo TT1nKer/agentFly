@@ -5,7 +5,7 @@ import 'package:agent_cockpit/crypto/signer.dart';
 import 'package:agent_cockpit/api/ws_client.dart';
 import 'package:agent_cockpit/api/message_service.dart';
 import 'package:agent_cockpit/api/models.dart';
-import 'package:agent_cockpit/storage/secure_key_store.dart';
+import 'package:agent_cockpit/storage/platform_key_store.dart';
 
 class AppState extends ChangeNotifier {
   DeviceKey? _deviceKey;
@@ -39,7 +39,7 @@ class AppState extends ChangeNotifier {
   Future<void> _initKeys() async {
     _deviceKey = DeviceKey.generateSync();
     final signer = Signer(_deviceKey!.signingKey);
-    _messageService = MessageService(_deviceKey!, signer, InMemoryKeyStore());
+    _messageService = MessageService(_deviceKey!, signer, PlatformSecureKeyStore());
     notifyListeners();
   }
 

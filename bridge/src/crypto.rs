@@ -66,13 +66,34 @@ pub fn verify(vk: &VerifyingKey, signing_string: &str, signature: &Signature) ->
 }
 
 pub fn canonical_payload_hash(payload: &serde_json::Value) -> Result<String, String> {
-    let canonical = serde_json::to_string(payload)
+    let sorted = sort_json_keys(payload);
+    let canonical = serde_json::to_string(&sorted)
         .map_err(|e| format!("INVALID_JSON: {}", e))?;
     Ok(sha256_hex(canonical.as_bytes()))
 }
 
+fn sort_json_keys(value: &serde_json::Value) -> serde_json::Value {
+    match value {
+        serde_json::Value::Object(map) => {
+            let mut entries: Vec<_> = map.iter().collect();
+            entries.sort_by(|(a, _), (b, _)| a.cmp(b));
+            let sorted: serde_json::Map<String, serde_json::Value> = entries
+                .into_iter()
+                .map(|(k, v)| (k.clone(), sort_json_keys(v)))
+                .collect();
+            serde_json::Value::Object(sorted)
+        }
+        serde_json::Value::Array(arr) => {
+            serde_json::Value::Array(arr.iter().map(sort_json_keys).collect())
+        }
+        other => other.clone(),
+    }
+}
+
 pub fn compute_payload_sha256(payload: &serde_json::Value) -> String {
-    sha256_hex(serde_json::to_string(payload).unwrap_or_default().as_bytes())
+    canonical_payload_hash(payload).unwrap_or_else(|_| {
+        sha256_hex(serde_json::to_string(payload).unwrap_or_default().as_bytes())
+    })
 }
 
 #[cfg(test)]

@@ -37,9 +37,20 @@ class Signer {
   }
 
   static String computePayloadSha256(Map<String, dynamic> payload) {
-    final canonicalJson = jsonEncode(payload);
+    final sorted = _sortJsonKeys(payload);
+    final canonicalJson = jsonEncode(sorted);
     final bytes = utf8.encode(canonicalJson);
     return crypto.sha256.convert(bytes).toString();
+  }
+
+  static Map<String, dynamic> _sortJsonKeys(Map<String, dynamic> map) {
+    final sortedKeys = map.keys.toList()..sort();
+    final sorted = <String, dynamic>{};
+    for (final key in sortedKeys) {
+      final value = map[key];
+      sorted[key] = value is Map<String, dynamic> ? _sortJsonKeys(value) : value;
+    }
+    return sorted;
   }
 
   static String generateNonce() {

@@ -1,3 +1,5 @@
+#[macro_use]
+pub mod log;
 pub mod crypto;
 pub mod verify;
 pub mod config;

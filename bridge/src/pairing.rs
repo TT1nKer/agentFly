@@ -21,6 +21,7 @@ pub fn verify_pairing_request(
 ) -> Result<String, String> {
     let valid = db.verify_pairing_code(pairing_code)?;
     if !valid {
+        db.record_pairing_failure(pairing_code)?;
         return Err("Invalid or expired pairing code".to_string());
     }
 
@@ -128,5 +129,26 @@ mod tests {
 
         let result = verify_pairing_request(&db, code, &pk, "Phone", "ios");
         assert!(result.is_err(), "Expired pairing code should be rejected");
+    }
+
+    #[test]
+    fn test_pairing_lockout_after_5_failures() {
+        let db = new_test_db();
+        let code = generate_pairing_code(&db).unwrap();
+        let (_, vk) = generate_keypair();
+        let pk = public_key_to_base64(&vk);
+
+        for _ in 0..4 {
+            db.record_pairing_failure(&code).unwrap();
+        }
+        let result = verify_pairing_request(&db, &code, &pk, "Phone", "ios");
+        assert!(result.is_ok(), "Should still work before 5th failure");
+
+        let code2 = generate_pairing_code(&db).unwrap();
+        for _ in 0..5 {
+            db.record_pairing_failure(&code2).unwrap();
+        }
+        let result2 = verify_pairing_request(&db, &code2, &pk, "Phone2", "ios");
+        assert!(result2.is_err(), "Should be locked after 5 failures");
     }
 }

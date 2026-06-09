@@ -69,6 +69,8 @@ impl BridgeDb {
                 code TEXT PRIMARY KEY,
                 expires_at INTEGER NOT NULL,
                 used INTEGER NOT NULL DEFAULT 0,
+                fail_count INTEGER NOT NULL DEFAULT 0,
+                locked_until INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL
             );
         ").map_err(|e| format!("DB init: {}", e))?;
@@ -79,7 +81,7 @@ impl BridgeDb {
     pub fn set_pairing_code(&self, code: String, expires_at: i64) -> Result<(), String> {
         let conn = &self.conn;
         conn.execute(
-            "INSERT OR REPLACE INTO pairing_codes (code, expires_at, used, created_at) VALUES (?1, ?2, 0, ?3)",
+            "INSERT OR REPLACE INTO pairing_codes (code, expires_at, used, fail_count, locked_until, created_at) VALUES (?1, ?2, 0, 0, 0, ?3)",
             params![code, expires_at, chrono::Utc::now().to_rfc3339()],
         ).map_err(|e| format!("set_pairing_code: {}", e))?;
         Ok(())
@@ -88,28 +90,79 @@ impl BridgeDb {
     pub fn verify_pairing_code(&self, code: &str) -> Result<bool, String> {
         let conn = &self.conn;
         let mut stmt = conn.prepare(
-            "SELECT expires_at, used FROM pairing_codes WHERE code = ?1"
+            "SELECT expires_at, used, fail_count, locked_until FROM pairing_codes WHERE code = ?1"
         ).map_err(|e| format!("verify_pairing_code: {}", e))?;
 
         let result = stmt.query_row(params![code], |row| {
-            Ok((row.get::<_, i64>(0)?, row.get::<_, i32>(1)?))
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, i32>(1)?,
+                row.get::<_, i32>(2)?,
+                row.get::<_, i64>(3)?,
+            ))
         });
 
         match result {
-            Ok((expires_at, used)) => {
+            Ok((expires_at, used, fail_count, locked_until)) => {
+                let now = chrono::Utc::now().timestamp();
+
+                if locked_until > now {
+                    return Ok(false);
+                }
+
                 if used != 0 {
                     return Ok(false);
                 }
-                let now = chrono::Utc::now().timestamp();
+
                 if now > expires_at {
                     return Ok(false);
                 }
+
                 conn.execute("UPDATE pairing_codes SET used = 1 WHERE code = ?1", params![code])
                     .map_err(|e| format!("mark_pairing_code: {}", e))?;
                 Ok(true)
             }
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(false),
             Err(e) => Err(format!("verify_pairing_code: {}", e)),
+        }
+    }
+
+    pub fn record_pairing_failure(&self, code: &str) -> Result<bool, String> {
+        let conn = &self.conn;
+        let max_fails: i32 = 5;
+        let lockout_secs: i64 = 600;
+
+        let mut stmt = conn.prepare(
+            "SELECT fail_count, locked_until FROM pairing_codes WHERE code = ?1"
+        ).map_err(|e| format!("record_failure: {}", e))?;
+
+        let result = stmt.query_row(params![code], |row| {
+            Ok((row.get::<_, i32>(0)?, row.get::<_, i64>(1)?))
+        });
+
+        match result {
+            Ok((fail_count, locked_until)) => {
+                let now = chrono::Utc::now().timestamp();
+                if locked_until > now {
+                    return Ok(true);
+                }
+
+                let new_count = fail_count + 1;
+                if new_count >= max_fails {
+                    conn.execute(
+                        "UPDATE pairing_codes SET fail_count = ?1, locked_until = ?2 WHERE code = ?3",
+                        params![new_count, now + lockout_secs, code],
+                    ).map_err(|e| format!("record_failure: {}", e))?;
+                } else {
+                    conn.execute(
+                        "UPDATE pairing_codes SET fail_count = ?1 WHERE code = ?2",
+                        params![new_count, code],
+                    ).map_err(|e| format!("record_failure: {}", e))?;
+                }
+                Ok(true)
+            }
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(false),
+            Err(e) => Err(format!("record_failure: {}", e)),
         }
     }
 
