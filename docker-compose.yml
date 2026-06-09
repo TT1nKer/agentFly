@@ -1,0 +1,25 @@
+version: "3.8"
+
+services:
+  relay:
+    build:
+      context: .
+      target: relay
+    ports:
+      - "8080:8080"
+    networks:
+      - cockpit
+
+  bridge:
+    build:
+      context: .
+      target: bridge
+    depends_on:
+      - relay
+    environment:
+      - RELAY_URL=ws://relay:8080
+    networks:
+      - cockpit
+
+networks:
+  cockpit:

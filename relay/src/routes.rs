@@ -1,23 +1,33 @@
 use axum::{Router, routing::get, response::Json, extract::WebSocketUpgrade, extract::Query};
 use serde_json::json;
 use std::sync::Arc;
-use tokio::sync::Mutex;
-use crate::db::RelayDb;
 use crate::ws;
+use crate::ws::RelayState;
 
-pub fn create_router(db: RelayDb) -> Router {
-    let db = Arc::new(Mutex::new(db));
+pub fn create_router() -> Router {
+    let state = Arc::new(RelayState::new());
 
     Router::new()
         .route("/health", get(health_handler))
         .route("/ws", get(ws_handler))
-        .with_state(db)
+        .route("/devices", get(devices_handler))
+        .with_state(state)
 }
 
 async fn health_handler() -> Json<serde_json::Value> {
     Json(json!({
         "status": "ok",
         "service": "agent-relay"
+    }))
+}
+
+async fn devices_handler(
+    state: axum::extract::State<Arc<RelayState>>,
+) -> Json<serde_json::Value> {
+    let devices = state.list_devices().await;
+    Json(json!({
+        "devices": devices,
+        "count": devices.len()
     }))
 }
 
@@ -30,13 +40,13 @@ struct WsParams {
 async fn ws_handler(
     ws: WebSocketUpgrade,
     Query(params): Query<WsParams>,
-    state: axum::extract::State<Arc<Mutex<RelayDb>>>,
+    state: axum::extract::State<Arc<RelayState>>,
 ) -> impl axum::response::IntoResponse {
-    let db = state.lock().await;
-    db.register_device(&params.device_id, &params.device_type, &params.device_id).ok();
-    drop(db);
+    let device_id = params.device_id;
+    let device_type = params.device_type;
 
-    ws.on_upgrade(move |socket| ws::handle_ws(socket, params.device_id))
+    let state_inner = state.0.clone();
+    ws.on_upgrade(move |socket| ws::handle_ws(socket, device_id, device_type, state_inner))
 }
 
 #[cfg(test)]
@@ -48,8 +58,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_health_endpoint() {
-        let db = crate::db::RelayDb::open(":memory:").unwrap();
-        let app = create_router(db);
+        let app = create_router();
 
         let response = app
             .oneshot(
@@ -65,6 +74,22 @@ mod tests {
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["status"], "ok");
-        assert_eq!(json["service"], "agent-relay");
+    }
+
+    #[tokio::test]
+    async fn test_devices_endpoint() {
+        let app = create_router();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/devices")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
     }
 }

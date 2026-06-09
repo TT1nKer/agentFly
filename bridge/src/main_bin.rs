@@ -90,5 +90,15 @@ fn cmd_devices_revoke(device_id: &str) {
 }
 
 fn cmd_run() {
-    println!("Bridge running... (WebSocket client to relay, not yet implemented)");
+    let relay_url = std::env::var("RELAY_URL").unwrap_or_else(|_| "ws://localhost:8080".to_string());
+    let rt = tokio::runtime::Runtime::new().expect("Failed to create tokio runtime");
+
+    rt.block_on(async {
+        let client = agent_bridge::relay_client::BridgeClient::new(&relay_url, "bridge.db")
+            .expect("Failed to create bridge client");
+
+        if let Err(e) = client.run().await {
+            eprintln!("Bridge error: {}", e);
+        }
+    });
 }
